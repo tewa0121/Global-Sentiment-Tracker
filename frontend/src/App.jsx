@@ -14,19 +14,38 @@ export default function App() {
   const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
   const [loading, setLoading] = useState(false);
 
-  const fetchPosts = useCallback(async () => {
+  // Fetch posts with clean cancellation handling to prevent console abort errors
+  const fetchPosts = useCallback(async (signal) => {
     try {
-      const res = await axios.get('http://localhost:5000/api/posts');
+      const res = await axios.get('http://localhost:5000/api/posts', { signal });
       setPosts(res.data);
     } catch (err) {
+      if (
+        axios.isCancel(err) ||
+        err.code === 'ERR_CANCELED' ||
+        err.code === 'ECONNABORTED' ||
+        err.name === 'CanceledError' ||
+        err.message === 'canceled' ||
+        err.message === 'Request aborted'
+      ) {
+        return; // Silently ignore intentional request cancellations during unmounts/HMR
+      }
       console.error('Failed to fetch posts:', err);
     }
   }, []);
 
   useEffect(() => {
-    fetchPosts();
-    const interval = setInterval(fetchPosts, 3000);
-    return () => clearInterval(interval);
+    const controller = new AbortController();
+
+    fetchPosts(controller.signal);
+    const interval = setInterval(() => {
+      fetchPosts(controller.signal);
+    }, 3000);
+
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [fetchPosts]);
 
   const handleSubmit = async (e) => {
@@ -40,7 +59,7 @@ export default function App() {
       await fetchPosts();
     } catch (err) {
       console.error('Error adding post:', err);
-      alert('Failed to connect to Express backend.');
+      alert('Failed to send data to the server.');
     } finally {
       setLoading(false);
     }
@@ -86,7 +105,7 @@ export default function App() {
     <div style={{ maxWidth: '1000px', margin: '30px auto', fontFamily: 'system-ui, sans-serif', color: '#1f2937', padding: '0 15px' }}>
       <h1 style={{ textAlign: 'center', marginBottom: '25px', fontSize: '2rem' }}>Global Sentiment Dashboard</h1>
 
-      {/* Post Submission Form */}
+      {/* Form Section */}
       <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
         <input
           type="text"
@@ -119,13 +138,13 @@ export default function App() {
         </button>
       </form>
 
-      {/* Metrics Row */}
+      {/* Summary Row */}
       <SummaryMetrics posts={filteredPosts} />
 
-      {/* Date Filter & CSV Export */}
+      {/* Filter and Export Component */}
       <DataExport posts={filteredPosts} onDateFilter={setDateRange} />
 
-      {/* Topic Filter */}
+      {/* Topics Control */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Analytics Breakdown</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -144,13 +163,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* Map Section */}
+      {/* Map Visualization */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#fff', marginBottom: '30px' }}>
         <h3 style={{ margin: '0 0 15px 0' }}>Global Sentiment Map</h3>
         <SentimentMap posts={filteredPosts} />
       </div>
 
-      {/* Charts Grid */}
+      {/* Analytics Charts */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
         <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#fff' }}>
           <h3 style={{ margin: '0 0 15px 0' }}>Distribution</h3>
@@ -162,11 +181,11 @@ export default function App() {
         </div>
       </div>
 
-      {/* Post Stream Feed */}
+      {/* Live Feed List */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#fff' }}>
         <h3 style={{ margin: '0 0 15px 0' }}>Live Feed ({filteredPosts.length})</h3>
         {filteredPosts.length === 0 ? (
-          <p style={{ color: '#6b7280' }}>No matching posts.</p>
+          <p style={{ color: '#6b7280' }}>No matching posts found.</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {filteredPosts.slice(0, 10).map((post) => (

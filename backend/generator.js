@@ -1,37 +1,62 @@
 const axios = require('axios');
 
-const MOCK_KEYWORDS = ['Technology', 'Climate', 'Crypto', 'AI', 'Sports'];
-
-const MOCK_POSTS = [
-  // Positive
-  { text: "This new AI framework is insanely fast and simple to build with!", keyword: "AI" },
-  { text: "Love how much progress we are making in clean solar energy.", keyword: "Climate" },
-  { text: "React and Node combined make web development a total breeze.", keyword: "Technology" },
-  { text: "What a fantastic match today, absolute world class performance!", keyword: "Sports" },
-  
-  // Negative
-  { text: "Database crashes during peak traffic hours are completely unacceptable.", keyword: "Technology" },
-  { text: "Global temperatures reaching historic highs is very concerning.", keyword: "Climate" },
-  { text: "Market drop today wiped out weeks of steady gains.", keyword: "Crypto" },
-  { text: "The new UI update feels sluggish and breaks basic accessibility.", keyword: "Technology" },
-
-  // Neutral
-  { text: "Attending the developer conference in downtown today.", keyword: "Technology" },
-  { text: "The weekly weather report predicts mild temperatures and light rain.", keyword: "Climate" },
-  { text: "New regulation guidelines published by the committee.", keyword: "Crypto" }
+const mockPosts = [
+  { 
+    keyword: 'Technology', 
+    post_text: 'This application is great, awesome, fast, and amazing!',
+    sentiment_score: 12,
+    sentiment_label: 'positive'
+  },
+  { 
+    keyword: 'AI', 
+    post_text: 'Terrible system, sluggish performance, crash and bug issues.',
+    sentiment_score: -8,
+    sentiment_label: 'negative'
+  },
+  { 
+    keyword: 'Coffee', 
+    post_text: 'Standard automated streaming log check.',
+    sentiment_score: 0,
+    sentiment_label: 'neutral'
+  },
+  { 
+    keyword: 'React', 
+    post_text: 'Fantastic library, love the speed and excellent design!',
+    sentiment_score: 9,
+    sentiment_label: 'positive'
+  },
+  { 
+    keyword: 'Nodejs', 
+    post_text: 'Horrible server fail, bad connection, broken routes.',
+    sentiment_score: -6,
+    sentiment_label: 'negative'
+  },
+  { 
+    keyword: 'MAMP', 
+    post_text: 'Routine local host database operational diagnostic.',
+    sentiment_score: 0,
+    sentiment_label: 'neutral'
+  }
 ];
 
-async function sendMockPost() {
-  const randomPost = MOCK_POSTS[Math.floor(Math.random() * MOCK_POSTS.length)];
+const API_URL = 'http://localhost:5000/api/posts';
 
+async function sendMockPost() {
   try {
-    const res = await axios.post('http://localhost:5000/api/posts', randomPost);
-    console.log(`[Auto-Stream] Added post: "${res.data.post_text}" -> (${res.data.sentiment_label.toUpperCase()})`);
-  } catch (err) {
-    console.error('[Auto-Stream Error]:', err.message);
+    const randomPost = mockPosts[Math.floor(Math.random() * mockPosts.length)];
+    const response = await axios.post(API_URL, randomPost, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const label = response.data?.sentiment_label || 'NEUTRAL';
+    const score = response.data?.sentiment_score ?? 0;
+
+    console.log(`✅ [Post Sent]: #${randomPost.keyword} | Label: ${label.toUpperCase()} (Score: ${score})`);
+  } catch (error) {
+    const msg = error.response?.data?.error || error.message;
+    console.error(`[Error]: ${msg}`);
   }
 }
 
-// Stream a new post every 3 seconds
 console.log('🚀 Starting Mock Data Generator (sending post every 3s)...');
 setInterval(sendMockPost, 3000);
