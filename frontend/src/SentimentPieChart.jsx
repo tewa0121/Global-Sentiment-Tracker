@@ -22,7 +22,15 @@ export default function SentimentPieChart({ posts }) {
     <div style={{ width: '100%', height: 300 }}>
       <ResponsiveContainer>
         <PieChart>
-          <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+          <Pie 
+            data={chartData} 
+            dataKey="value" 
+            nameKey="name" 
+            cx="50%" 
+            cy="50%" 
+            outerRadius={80} 
+            label
+          >
             {chartData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
