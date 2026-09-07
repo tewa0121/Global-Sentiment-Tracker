@@ -1,16 +1,17 @@
 const mysql = require('mysql2/promise');
 
+// MAMP MySQL Default Configuration
 const DB_HOST = 'localhost';
-const DB_PORT = 8889; // MAMP MySQL default port
+const DB_PORT = 8889;
 const DB_USER = 'root';
-const DB_PASSWORD = 'root'; // Change to '' if your MAMP password is empty
+const DB_PASSWORD = 'root'; // Change to '' if your MAMP password is blank
 const DB_NAME = 'sentiment_tracker';
 
 let pool = null;
 
 async function initDB() {
   try {
-    // 1. Connect to MySQL without specifying a database to create it if missing
+    // 1. Connect without database to ensure DB exists
     const tempConnection = await mysql.createConnection({
       host: DB_HOST,
       port: DB_PORT,
@@ -21,7 +22,7 @@ async function initDB() {
     await tempConnection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;`);
     await tempConnection.end();
 
-    // 2. Connect directly to sentiment_tracker database
+    // 2. Create connection pool to the created database
     pool = mysql.createPool({
       host: DB_HOST,
       port: DB_PORT,
@@ -49,18 +50,21 @@ async function initDB() {
         post_text TEXT NOT NULL,
         sentiment_score DECIMAL(5,2) NOT NULL,
         sentiment_label ENUM('positive', 'negative', 'neutral') NOT NULL,
+        latitude DECIMAL(9,6) NULL,
+        longitude DECIMAL(9,6) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (keyword_id) REFERENCES keywords(id) ON DELETE CASCADE
       ) ENGINE=InnoDB;
     `);
 
-    console.log('✅ Database & Tables initialized successfully in MAMP MySQL!');
+    console.log('Database and tables initialized successfully!');
   } catch (error) {
-    console.error('❌ Database initialization failed:', error.message);
+    console.error('Database initialization failed:', error.message);
     process.exit(1);
   }
 }
 
+// Helper getter to access pool in controllers
 function getPool() {
   if (!pool) {
     throw new Error('Database pool not initialized!');
