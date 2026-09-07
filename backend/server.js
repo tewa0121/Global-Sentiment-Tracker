@@ -1,13 +1,25 @@
 const express = require('express');
 const cors = require('cors');
+const Sentiment = require('sentiment');
 const { initDB, getPool } = require('./config/db');
-const analyzeText = require('./utils/sentiment');
 
 const app = express();
+const sentimentAnalyzer = new Sentiment();
+
 app.use(cors());
 app.use(express.json());
 
-// GET: Fetch recent posts with keywords
+// Helper function to calculate sentiment
+function analyzeText(text) {
+  const result = sentimentAnalyzer.analyze(text);
+  let label = 'neutral';
+  if (result.score > 0) label = 'positive';
+  else if (result.score < 0) label = 'negative';
+
+  return { score: result.score, label };
+}
+
+// GET API: Fetch all posts
 app.get('/api/posts', async (req, res) => {
   try {
     const db = getPool();
@@ -24,7 +36,7 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-// POST: Add new post, analyze sentiment, store in DB
+// POST API: Save new post with sentiment
 app.post('/api/posts', async (req, res) => {
   const { text, keyword } = req.body;
   if (!text || !keyword) {
@@ -36,7 +48,7 @@ app.post('/api/posts', async (req, res) => {
   try {
     const db = getPool();
 
-    // Check if keyword exists, insert if missing
+    // Check or insert keyword
     let [keywords] = await db.query('SELECT id FROM keywords WHERE term = ?', [keyword]);
     let keywordId = keywords[0]?.id;
 
@@ -45,7 +57,7 @@ app.post('/api/posts', async (req, res) => {
       keywordId = insertResult.insertId;
     }
 
-    // Insert post record
+    // Insert post
     const [postResult] = await db.query(
       'INSERT INTO posts (keyword_id, post_text, sentiment_score, sentiment_label) VALUES (?, ?, ?, ?)',
       [keywordId, text, analysis.score, analysis.label]
@@ -63,8 +75,8 @@ app.post('/api/posts', async (req, res) => {
   }
 });
 
-// Initialize Database then Start Server
+// Initialize DB and start server
 const PORT = 5000;
 initDB().then(() => {
-  app.listen(PORT, () => console.log(`Server listening at http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));
 });
