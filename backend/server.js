@@ -6,29 +6,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// MySQL Connection Pool
+// MySQL Database Pool Configuration
 const db = mysql.createPool({
   host: 'localhost',
-  user: 'root', // Replace with your MySQL user
-  password: 'your_password', // Replace with your MySQL password
+  user: 'root',
+  password: 'your_password',
   database: 'sentiment_db'
 });
 
-// Helper for sentiment calculation
+// Basic sentiment analysis engine
 function analyzeText(text) {
   const lower = text.toLowerCase();
   let score = 0;
   
-  const positiveWords = ['great', 'awesome', 'love', 'fantastic', 'breeze', 'fast', 'progress', 'world class', 'incredible', 'excellent'];
-  const negativeWords = ['crash', 'bad', 'sluggish', 'unacceptable', 'frustrating', 'drop', 'concerning', 'terrible', 'fail', 'slow'];
+  const positiveWords = ['great', 'awesome', 'love', 'fantastic', 'fast', 'progress', 'incredible', 'excellent', 'happy', 'good'];
+  const negativeWords = ['crash', 'bad', 'sluggish', 'unacceptable', 'frustrating', 'drop', 'terrible', 'fail', 'slow', 'broken'];
 
-  positiveWords.forEach(word => {
-    if (lower.includes(word)) score += 3;
-  });
-
-  negativeWords.forEach(word => {
-    if (lower.includes(word)) score -= 2;
-  });
+  positiveWords.forEach(w => { if (lower.includes(w)) score += 3; });
+  negativeWords.forEach(w => { if (lower.includes(w)) score -= 2; });
 
   let label = 'neutral';
   if (score > 0) label = 'positive';
@@ -37,28 +32,28 @@ function analyzeText(text) {
   return { score, label };
 }
 
-// GET Endpoint: Fetch all posts
+// GET Endpoint: Return all posts
 app.get('/api/posts', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM posts ORDER BY created_at DESC');
     res.json(rows);
   } catch (err) {
-    console.error('Error fetching posts:', err);
-    res.status(500).json({ error: 'Database query failed' });
+    console.error('Fetch Error:', err);
+    res.status(500).json({ error: 'Failed to retrieve posts' });
   }
 });
 
-// POST Endpoint: Save user-submitted post
+// POST Endpoint: Save analyzed post
 app.post('/api/posts', async (req, res) => {
   const { text, keyword } = req.body;
 
-  if (!text || text.trim() === '') {
+  if (!text || !text.trim()) {
     return res.status(400).json({ error: 'Text content is required' });
   }
 
   const { score, label } = analyzeText(text);
 
-  // Generate random coordinates for geospatial mapping
+  // Random coordinates for global map view
   const latitude = (Math.random() * 140 - 70).toFixed(4);
   const longitude = (Math.random() * 360 - 180).toFixed(4);
 
@@ -77,18 +72,14 @@ app.post('/api/posts', async (req, res) => {
       longitude
     ]);
 
-    res.json({
-      success: true,
-      id: result.insertId,
-      message: 'Post analyzed and saved successfully'
-    });
+    res.json({ success: true, id: result.insertId });
   } catch (err) {
-    console.error('Error inserting post:', err);
-    res.status(500).json({ error: 'Failed to insert post into database' });
+    console.error('Insert Error:', err);
+    res.status(500).json({ error: 'Failed to save post' });
   }
 });
 
 const PORT = 5000;
 app.listen(PORT, () => {
-  console.log(`Backend server listening on http://localhost:${PORT}`);
+  console.log(`Backend server listening at http://localhost:${PORT}`);
 });
