@@ -4,12 +4,15 @@ import SentimentPieChart from './SentimentPieChart.jsx';
 import SentimentLineChart from './SentimentLineChart.jsx';
 import SummaryMetrics from './SummaryMetrics.jsx';
 import SentimentMap from './SentimentMap.jsx';
+import DataExport from './DataExport.jsx';
 
 export default function App() {
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState('');
   const [keyword, setKeyword] = useState('Technology');
   const [selectedFilter, setSelectedFilter] = useState('ALL');
+  const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+  const [loading, setLoading] = useState(false);
 
   const fetchPosts = useCallback(async () => {
     try {
@@ -29,16 +32,21 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchPosts]);
 
+  // Handle manual post analysis submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!text.trim()) return;
 
+    setLoading(true);
     try {
       await axios.post('http://localhost:5000/api/posts', { text, keyword });
       setText('');
-      fetchPosts();
+      await fetchPosts(); // Instant UI sync after submission
     } catch (err) {
-      console.error('Failed to add post:', err);
+      console.error('Failed to analyze post:', err);
+      alert('Error submitting post. Make sure your Express server is running on port 5000.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -47,12 +55,29 @@ export default function App() {
     return Array.from(set);
   }, [posts]);
 
+  // Combined Topic and Date Filter logic
   const filteredPosts = useMemo(() => {
-    if (selectedFilter === 'ALL') return posts;
-    return posts.filter(
-      (p) => p.keyword?.toLowerCase() === selectedFilter.toLowerCase()
-    );
-  }, [posts, selectedFilter]);
+    return posts.filter((p) => {
+      const matchesKeyword =
+        selectedFilter === 'ALL' ||
+        p.keyword?.toLowerCase() === selectedFilter.toLowerCase();
+
+      let matchesDate = true;
+      if (p.created_at) {
+        const postDate = new Date(p.created_at);
+        if (dateRange.startDate) {
+          matchesDate = matchesDate && postDate >= new Date(dateRange.startDate);
+        }
+        if (dateRange.endDate) {
+          const end = new Date(dateRange.endDate);
+          end.setHours(23, 59, 59, 999);
+          matchesDate = matchesDate && postDate <= end;
+        }
+      }
+
+      return matchesKeyword && matchesDate;
+    });
+  }, [posts, selectedFilter, dateRange]);
 
   const getBadgeColor = (label) => {
     switch (label?.toLowerCase()) {
@@ -84,24 +109,28 @@ export default function App() {
         />
         <button 
           type="submit" 
+          disabled={loading}
           style={{ 
             padding: '12px 20px', 
-            cursor: 'pointer', 
-            backgroundColor: '#2563EB', 
+            cursor: loading ? 'not-allowed' : 'pointer', 
+            backgroundColor: loading ? '#9ca3af' : '#2563EB', 
             color: '#fff', 
             border: 'none', 
             borderRadius: '6px',
             fontWeight: '600'
           }}
         >
-          Analyze
+          {loading ? 'Analyzing...' : 'Analyze'}
         </button>
       </form>
 
-      {/* Summary KPI Cards */}
+      {/* KPI Cards */}
       <SummaryMetrics posts={filteredPosts} />
 
-      {/* Keyword Filter Controls */}
+      {/* Export & Date Filter Toolbar */}
+      <DataExport posts={filteredPosts} onDateFilter={setDateRange} />
+
+      {/* Topic Filter Selector */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Dashboard Analytics</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -124,13 +153,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* World Map Section */}
+      {/* Interactive Map */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
         <h2 style={{ fontSize: '1.1rem', margin: '0 0 15px 0' }}>Geographic Sentiment Mapping</h2>
         <SentimentMap posts={filteredPosts} />
       </div>
 
-      {/* Charts Section */}
+      {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
         <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <h2 style={{ fontSize: '1.1rem', margin: '0 0 15px 0' }}>Sentiment Breakdown</h2>
@@ -143,13 +172,13 @@ export default function App() {
         </div>
       </div>
 
-      {/* Feed Section */}
+      {/* Real-time Post Feed */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
         <h2 style={{ fontSize: '1.1rem', margin: '0 0 15px 0' }}>
           Recent Post Feed ({filteredPosts.length})
         </h2>
         {filteredPosts.length === 0 ? (
-          <p style={{ color: '#6b7280' }}>No posts match this filter. Try selecting "All Keywords".</p>
+          <p style={{ color: '#6b7280' }}>No posts match this filter.</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {filteredPosts.slice(0, 10).map((post) => (

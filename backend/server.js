@@ -1,82 +1,94 @@
 const express = require('express');
+const mysql = require('mysql2/promise');
 const cors = require('cors');
-const Sentiment = require('sentiment');
-const { initDB, getPool } = require('./config/db');
 
 const app = express();
-const sentimentAnalyzer = new Sentiment();
-
 app.use(cors());
 app.use(express.json());
 
-// Helper function to calculate sentiment
-function analyzeText(text) {
-  const result = sentimentAnalyzer.analyze(text);
-  let label = 'neutral';
-  if (result.score > 0) label = 'positive';
-  else if (result.score < 0) label = 'negative';
+// MySQL Connection Pool
+const db = mysql.createPool({
+  host: 'localhost',
+  user: 'root', // Replace with your MySQL user
+  password: 'your_password', // Replace with your MySQL password
+  database: 'sentiment_db'
+});
 
-  return { score: result.score, label };
+// Helper for sentiment calculation
+function analyzeText(text) {
+  const lower = text.toLowerCase();
+  let score = 0;
+  
+  const positiveWords = ['great', 'awesome', 'love', 'fantastic', 'breeze', 'fast', 'progress', 'world class', 'incredible', 'excellent'];
+  const negativeWords = ['crash', 'bad', 'sluggish', 'unacceptable', 'frustrating', 'drop', 'concerning', 'terrible', 'fail', 'slow'];
+
+  positiveWords.forEach(word => {
+    if (lower.includes(word)) score += 3;
+  });
+
+  negativeWords.forEach(word => {
+    if (lower.includes(word)) score -= 2;
+  });
+
+  let label = 'neutral';
+  if (score > 0) label = 'positive';
+  if (score < 0) label = 'negative';
+
+  return { score, label };
 }
 
-// GET API: Fetch all posts
+// GET Endpoint: Fetch all posts
 app.get('/api/posts', async (req, res) => {
   try {
-    const db = getPool();
-    const [rows] = await db.query(`
-      SELECT p.id, p.post_text, p.sentiment_score, p.sentiment_label, k.term AS keyword, p.created_at 
-      FROM posts p 
-      JOIN keywords k ON p.keyword_id = k.id 
-      ORDER BY p.created_at DESC 
-      LIMIT 100
-    `);
+    const [rows] = await db.query('SELECT * FROM posts ORDER BY created_at DESC');
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error fetching posts:', err);
+    res.status(500).json({ error: 'Database query failed' });
   }
 });
 
-// POST API: Save new post with sentiment
+// POST Endpoint: Save user-submitted post
 app.post('/api/posts', async (req, res) => {
   const { text, keyword } = req.body;
-  if (!text || !keyword) {
-    return res.status(400).json({ error: 'Text and keyword are required.' });
+
+  if (!text || text.trim() === '') {
+    return res.status(400).json({ error: 'Text content is required' });
   }
 
-  const analysis = analyzeText(text);
+  const { score, label } = analyzeText(text);
+
+  // Generate random coordinates for geospatial mapping
+  const latitude = (Math.random() * 140 - 70).toFixed(4);
+  const longitude = (Math.random() * 360 - 180).toFixed(4);
+
+  const query = `
+    INSERT INTO posts (post_text, keyword, sentiment_score, sentiment_label, latitude, longitude, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, NOW())
+  `;
 
   try {
-    const db = getPool();
+    const [result] = await db.execute(query, [
+      text,
+      keyword || 'General',
+      score,
+      label,
+      latitude,
+      longitude
+    ]);
 
-    // Check or insert keyword
-    let [keywords] = await db.query('SELECT id FROM keywords WHERE term = ?', [keyword]);
-    let keywordId = keywords[0]?.id;
-
-    if (!keywordId) {
-      const [insertResult] = await db.query('INSERT INTO keywords (term) VALUES (?)', [keyword]);
-      keywordId = insertResult.insertId;
-    }
-
-    // Insert post
-    const [postResult] = await db.query(
-      'INSERT INTO posts (keyword_id, post_text, sentiment_score, sentiment_label) VALUES (?, ?, ?, ?)',
-      [keywordId, text, analysis.score, analysis.label]
-    );
-
-    res.status(201).json({
-      id: postResult.insertId,
-      keyword,
-      post_text: text,
-      sentiment_score: analysis.score,
-      sentiment_label: analysis.label
+    res.json({
+      success: true,
+      id: result.insertId,
+      message: 'Post analyzed and saved successfully'
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error inserting post:', err);
+    res.status(500).json({ error: 'Failed to insert post into database' });
   }
 });
 
-// Initialize DB and start server
 const PORT = 5000;
-initDB().then(() => {
-  app.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Backend server listening on http://localhost:${PORT}`);
 });
