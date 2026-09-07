@@ -1,8 +1,19 @@
-export default function SummaryMetrics({ posts }) {
-  const total = posts.length;
-  const positive = posts.filter(p => p.sentiment_label?.toLowerCase() === 'positive').length;
-  const negative = posts.filter(p => p.sentiment_label?.toLowerCase() === 'negative').length;
-  const avgScore = total ? (posts.reduce((sum, p) => sum + Number(p.sentiment_score || 0), 0) / total).toFixed(2) : 0;
+import React, { useMemo } from 'react';
+
+export default function SummaryMetrics({ posts = [] }) {
+  const { total, positive, negative, avgScore } = useMemo(() => {
+    const totalCount = posts.length;
+    const positiveCount = posts.filter(p => p.sentiment_label?.toLowerCase() === 'positive').length;
+    const negativeCount = posts.filter(p => p.sentiment_label?.toLowerCase() === 'negative').length;
+    const scoreSum = posts.reduce((sum, p) => sum + Number(p.sentiment_score || 0), 0);
+
+    return {
+      total: totalCount,
+      positive: positiveCount,
+      negative: negativeCount,
+      avgScore: totalCount ? (scoreSum / totalCount).toFixed(2) : '0.00'
+    };
+  }, [posts]);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px' }}>
