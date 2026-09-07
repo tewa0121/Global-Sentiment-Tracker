@@ -16,7 +16,7 @@ export default function DataExport({ posts, onDateFilter }) {
   };
 
   const exportCSV = () => {
-    if (!posts.length) return alert('No data to export!');
+    if (!posts.length) return alert('No data available to export.');
     const headers = ['ID', 'Keyword', 'Text', 'Score', 'Label', 'Date'];
     const rows = posts.map(p => [
       p.id,
@@ -27,13 +27,11 @@ export default function DataExport({ posts, onDateFilter }) {
       p.created_at
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + 
-      [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `sentiment_data_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute('download', `sentiment_report_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -42,7 +40,7 @@ export default function DataExport({ posts, onDateFilter }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #e5e7eb' }}>
       <form onSubmit={handleApply} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <span style={{ fontWeight: '600', fontSize: '14px' }}>Date Filter:</span>
+        <span style={{ fontWeight: '600', fontSize: '14px' }}>Date Range:</span>
         <input type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc' }} />
         <span>to</span>
         <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc' }} />
