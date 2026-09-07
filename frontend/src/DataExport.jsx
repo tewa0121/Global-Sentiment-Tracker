@@ -1,53 +1,105 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 
-export default function DataExport({ posts, onDateFilter }) {
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
+export default function DataExport({ posts = [], onDateFilter }) {
+  const [tempStart, setTempStart] = useState('');
+  const [tempEnd, setTempEnd] = useState('');
 
-  const handleApply = (e) => {
-    e.preventDefault();
-    onDateFilter({ startDate: start, endDate: end });
+  // Apply date filters only when clicked
+  const handleApplyFilter = () => {
+    if (onDateFilter) {
+      onDateFilter({
+        startDate: tempStart,
+        endDate: tempEnd
+      });
+    }
   };
 
-  const handleClear = () => {
-    setStart('');
-    setEnd('');
-    onDateFilter({ startDate: '', endDate: '' });
+  // Reset date filters
+  const handleResetFilter = () => {
+    setTempStart('');
+    setTempEnd('');
+    if (onDateFilter) {
+      onDateFilter({ startDate: '', endDate: '' });
+    }
   };
 
-  const exportCSV = () => {
-    if (!posts.length) return alert('No data available to export.');
-    const headers = ['ID', 'Keyword', 'Text', 'Score', 'Label', 'Date'];
-    const rows = posts.map(p => [
+  // CSV Export Handler
+  const handleExportCSV = () => {
+    if (!posts || posts.length === 0) {
+      alert('No data to export!');
+      return;
+    }
+
+    const headers = ['ID', 'Keyword', 'Text', 'Sentiment', 'Score', 'Latitude', 'Longitude', 'Created At'];
+    const rows = posts.map((p) => [
       p.id,
       `"${p.keyword || ''}"`,
-      `"${p.post_text?.replace(/"/g, '""') || ''}"`,
-      p.sentiment_score,
+      `"${p.post_text ? p.post_text.replace(/"/g, '""') : ''}"`,
       p.sentiment_label,
-      p.created_at
+      p.sentiment_score,
+      p.latitude || '',
+      p.longitude || '',
+      `"${p.created_at}"`
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `sentiment_report_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `sentiment_export_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #e5e7eb' }}>
-      <form onSubmit={handleApply} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <span style={{ fontWeight: '600', fontSize: '14px' }}>Date Range:</span>
-        <input type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-        <span>to</span>
-        <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #ccc' }} />
-        <button type="submit" style={{ backgroundColor: '#2563eb', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>Apply</button>
-        <button type="button" onClick={handleClear} style={{ backgroundColor: '#9ca3af', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer' }}>Clear</button>
-      </form>
-      <button onClick={exportCSV} style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}>
+    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', marginBottom: '25px', border: '1px solid #e5e7eb', flexWrap: 'wrap' }}>
+      {/* Start Date Input */}
+      <div>
+        <label style={{ fontSize: '0.875rem', fontWeight: '500', marginRight: '6px' }}>Start Date:</label>
+        <input 
+          type="date" 
+          value={tempStart}
+          onChange={(e) => setTempStart(e.target.value)} 
+          style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db' }} 
+        />
+      </div>
+
+      {/* End Date Input */}
+      <div>
+        <label style={{ fontSize: '0.875rem', fontWeight: '500', marginRight: '6px' }}>End Date:</label>
+        <input 
+          type="date" 
+          value={tempEnd}
+          onChange={(e) => setTempEnd(e.target.value)} 
+          style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db' }} 
+        />
+      </div>
+
+      {/* Apply Button */}
+      <button
+        type="button"
+        onClick={handleApplyFilter}
+        style={{ backgroundColor: '#2563EB', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
+      >
+        Apply
+      </button>
+
+      {/* Reset Button */}
+      <button
+        type="button"
+        onClick={handleResetFilter}
+        style={{ backgroundColor: '#6B7280', color: '#fff', border: 'none', padding: '7px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer' }}
+      >
+        Reset
+      </button>
+
+      {/* CSV Export Button */}
+      <button
+        type="button"
+        onClick={handleExportCSV}
+        style={{ marginLeft: 'auto', backgroundColor: '#10B981', color: '#fff', border: 'none', padding: '7px 14px', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
+      >
         📥 Export CSV
       </button>
     </div>
