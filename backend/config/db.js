@@ -68,9 +68,17 @@ async function initDB() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 
-  // Existing installations with the original schema are compatible. We do not
-  // automatically alter unknown schemas; schema changes should be explicit migrations.
-  console.log(`Database ready: ${config.database} (existing tables/data preserved).`);
+  // --- ADDED: Users table for Authentication (JWT Login/Register) ---
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(255) UNIQUE NOT NULL,
+      password VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+
+  console.log(`Database ready: ${config.database} (existing tables/data and users table verified).`);
   return pool;
 }
 

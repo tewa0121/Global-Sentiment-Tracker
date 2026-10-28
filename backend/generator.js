@@ -8,6 +8,9 @@ const mockPosts = [
   { keyword: 'React', post_text: 'Fantastic library, love the speed and excellent design!' },
   { keyword: 'Nodejs', post_text: 'Horrible server fail, bad connection, broken routes.' },
   { keyword: 'MAMP', post_text: 'Routine local host database operational diagnostic.' },
+  { keyword: 'Cloud', post_text: 'Incredible uptime, seamless scaling, and wonderful developer experience.' },
+  { keyword: 'Database', post_text: 'Data corruption error, severe latency, completely unusable.' },
+  { keyword: 'Security', post_text: 'Vulnerability patched successfully, stable and safe architecture.' }
 ];
 
 const API_URL = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}/api/posts`;
@@ -28,7 +31,7 @@ async function sendMockPost() {
 
 if (require.main === module) {
   console.warn('DEMO MODE: this script generates synthetic sample posts, not real global data.');
-  console.warn('It is disabled unless explicitly run with: npm run generate');
+  console.warn('It is enabled via: npm run generate');
   sendMockPost();
   timer = setInterval(sendMockPost, INTERVAL_MS);
   const stop = () => {
