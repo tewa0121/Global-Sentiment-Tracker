@@ -1,14 +1,11 @@
 require('./config/env')();
 const express = require('express');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const { initDB, getPool, closeDB } = require('./config/db');
 const { analyzeText, MAX_TEXT_LENGTH } = require('./utils/sentiment');
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT || '5000', 10);
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_change_me';
 const MAX_KEYWORD_LENGTH = 100;
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
@@ -24,6 +21,7 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http:
 app.disable('x-powered-by');
 app.use(cors({
   origin(origin, callback) {
+    // No Origin is common for CLI tools and local health checks.
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('Origin not allowed by CORS'));
   },
@@ -31,7 +29,8 @@ app.use(cors({
 app.use(express.json({ limit: '32kb', strict: true }));
 app.use(express.urlencoded({ extended: false, limit: '32kb' }));
 
-// Lightweight per-IP in-memory rate limit
+// Lightweight per-IP in-memory rate limit. For multi-instance production deploys,
+// use a shared store (for example Redis) and a maintained rate-limit middleware.
 app.use((req, res, next) => {
   const now = Date.now();
   const key = req.ip || req.socket.remoteAddress || 'unknown';
@@ -45,6 +44,7 @@ app.use((req, res, next) => {
     res.set('Retry-After', String(Math.ceil((entry.start + WINDOW_MS - now) / 1000)));
     return res.status(429).json({ error: 'Too many requests. Please try again shortly.' });
   }
+  // Prevent this map growing without bound during long-lived local sessions.
   if (requestCounts.size > 5000) {
     for (const [ip, value] of requestCounts) {
       if (now - value.start >= WINDOW_MS) requestCounts.delete(ip);
@@ -62,57 +62,6 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-// --- AUTHENTICATION ROUTES (Register & Login) ---
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
-    const { username, password } = body;
-    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ error: 'Username and password are required strings' });
-    }
-
-    const pool = getPool();
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const [result] = await pool.query(
-      'INSERT INTO users (username, password) VALUES (?, ?)',
-      [username.trim(), hashedPassword]
-    );
-    res.status(201).json({ success: true, message: 'User registered successfully', userId: result.insertId });
-  } catch (err) {
-    console.error('Registration error:', err.message);
-    res.status(400).json({ error: 'Username already exists or database error' });
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
-    const { username, password } = body;
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
-    }
-
-    const pool = getPool();
-    const [rows] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
-    if (rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
-
-    const user = rows[0];
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid username or password' });
-    }
-
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ success: true, message: 'Login successful', token, username: user.username });
-  } catch (err) {
-    console.error('Login error:', err.message);
-    res.status(500).json({ error: 'Internal server error during login' });
-  }
-});
-
-// --- POSTS ROUTE WITH ADVANCED FILTERS (Keyword & Date Range) ---
 app.get('/api/posts', async (req, res) => {
   const limitRaw = req.query.limit === undefined ? DEFAULT_PAGE_SIZE : Number(req.query.limit);
   const offsetRaw = req.query.offset === undefined ? 0 : Number(req.query.offset);
@@ -125,35 +74,14 @@ app.get('/api/posts', async (req, res) => {
 
   try {
     const pool = getPool();
-    let query = `
+    const [rows] = await pool.query(`
       SELECT p.id, k.term AS keyword, p.post_text, p.sentiment_score,
              p.sentiment_label, p.latitude, p.longitude, p.created_at
       FROM posts p
       JOIN keywords k ON p.keyword_id = k.id
-      WHERE 1=1
-    `;
-    let params = [];
-
-    // Advanced Filter: Keyword / Topic search
-    if (req.query.keyword) {
-      query += ' AND k.term LIKE ?';
-      params.push(`%${req.query.keyword}%`);
-    }
-
-    // Advanced Filter: Date Range (Start Date & End Date)
-    if (req.query.startDate) {
-      query += ' AND p.created_at >= ?';
-      params.push(req.query.startDate + ' 00:00:00');
-    }
-    if (req.query.endDate) {
-      query += ' AND p.created_at <= ?';
-      params.push(req.query.endDate + ' 23:59:59');
-    }
-
-    query += ' ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?';
-    params.push(limitRaw, offsetRaw);
-
-    const [rows] = await pool.query(query, params);
+      ORDER BY p.created_at DESC, p.id DESC
+      LIMIT ? OFFSET ?
+    `, [limitRaw, offsetRaw]);
     res.set('Cache-Control', 'no-store');
     res.json(rows);
   } catch (err) {
@@ -181,6 +109,7 @@ app.post('/api/posts', async (req, res) => {
     return res.status(400).json({ error: `Keyword must be ${MAX_KEYWORD_LENGTH} characters or fewer` });
   }
 
+  // Accept coordinates only when both are provided and valid. Never invent location.
   let latitude = null;
   let longitude = null;
   if (body.latitude !== undefined || body.longitude !== undefined) {
@@ -238,7 +167,7 @@ app.use((err, _req, res, _next) => {
     return res.status(413).json({ error: 'Request body is too large' });
   }
   if (err && err.type === 'entity.parse.failed') {
-    return res.status(400).json({ error: 'Malformed JSON current body' });
+    return res.status(400).json({ error: 'Malformed JSON request body' });
   }
   if (err && err.message === 'Origin not allowed by CORS') {
     return res.status(403).json({ error: 'Origin not allowed' });

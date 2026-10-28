@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import SentimentPieChart from './SentimentPieChart.jsx';
 import SentimentLineChart from './SentimentLineChart.jsx';
@@ -6,17 +6,7 @@ import SummaryMetrics from './SummaryMetrics.jsx';
 import SentimentMap from './SentimentMap.jsx';
 import DataExport from './DataExport.jsx';
 
-const API_BASE = 'http://localhost:5000/api';
-
 export default function App() {
-  // --- Auth State ---
-  const [token, setToken] = useState(localStorage.getItem('token') || '');
-  const [username, setUsername] = useState(localStorage.getItem('username') || '');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [authForm, setAuthForm] = useState({ username: '', password: '' });
-  const [authError, setAuthError] = useState('');
-
-  // --- Dashboard State ---
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState('');
   const [keyword, setKeyword] = useState('Technology');
@@ -24,10 +14,10 @@ export default function App() {
   const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
   const [loading, setLoading] = useState(false);
 
-  // Fetch posts with clean cancellation handling
+  // Fetch posts with clean cancellation handling to prevent console abort errors
   const fetchPosts = useCallback(async (signal) => {
     try {
-      const res = await axios.get(`${API_BASE}/posts`, { signal });
+      const res = await axios.get('http://localhost:5000/api/posts', { signal });
       setPosts(res.data);
     } catch (err) {
       if (
@@ -38,7 +28,7 @@ export default function App() {
         err.message === 'canceled' ||
         err.message === 'Request aborted'
       ) {
-        return; // Silently ignore intentional request cancellations
+        return; // Silently ignore intentional request cancellations during unmounts/HMR
       }
       console.error('Failed to fetch posts:', err);
     }
@@ -46,6 +36,7 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+
     fetchPosts(controller.signal);
     const interval = setInterval(() => {
       fetchPosts(controller.signal);
@@ -57,43 +48,13 @@ export default function App() {
     };
   }, [fetchPosts]);
 
-  // Handle Login / Register Submit
-  const handleAuthSubmit = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    const endpoint = isRegistering ? '/auth/register' : '/auth/login';
-    try {
-      const res = await axios.post(`${API_BASE}${endpoint}`, authForm);
-      if (isRegistering) {
-        alert('Registration successful! Please login.');
-        setIsRegistering(false);
-        setAuthForm({ username: '', password: '' });
-      } else {
-        setToken(res.data.token);
-        setUsername(res.data.username);
-        localStorage.setItem('token', res.data.token);
-        localStorage.setItem('username', res.data.username);
-      }
-    } catch (err) {
-      setAuthError(err.response?.data?.error || 'Authentication failed');
-    }
-  };
-
-  const handleLogout = () => {
-    setToken('');
-    setUsername('');
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-  };
-
-  // Handle New Post Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!text.trim()) return;
 
     setLoading(true);
     try {
-      await axios.post(`${API_BASE}/posts`, { text, keyword });
+      await axios.post('http://localhost:5000/api/posts', { text, keyword });
       setText('');
       await fetchPosts();
     } catch (err) {
@@ -140,68 +101,9 @@ export default function App() {
     }
   };
 
-  // --- IF NOT LOGGED IN, SHOW AUTH (LOGIN / REGISTER) SCREEN ---
-  if (!token) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a', fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ background: '#1e293b', padding: '2.5rem', borderRadius: '12px', width: '380px', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', color: '#fff' }}>
-          <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', fontSize: '1.75rem' }}>
-            {isRegistering ? 'Create Account' : 'Dashboard Login'}
-          </h2>
-          {authError && <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '10px', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.875rem', textAlign: 'center' }}>{authError}</div>}
-          <form onSubmit={handleAuthSubmit}>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: '#94a3b8' }}>Username</label>
-              <input
-                type="text"
-                value={authForm.username}
-                onChange={(e) => setAuthForm({ ...authForm, username: e.target.value })}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#0f172a', color: '#fff', boxSizing: 'border-box' }}
-                required
-              />
-            </div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', color: '#94a3b8' }}>Password</label>
-              <input
-                type="password"
-                value={authForm.password}
-                onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #475569', background: '#0f172a', color: '#fff', boxSizing: 'border-box' }}
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              style={{ width: '100%', padding: '12px', backgroundColor: '#2563EB', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer', fontSize: '1rem' }}
-            >
-              {isRegistering ? 'Register' : 'Login'}
-            </button>
-          </form>
-          <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.875rem', color: '#60a5fa', cursor: 'pointer' }} onClick={() => setIsRegistering(!isRegistering)}>
-            {isRegistering ? 'Already have an account? Login here' : "Don't have an account? Register"}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // --- DASHBOARD VIEW (WHEN LOGGED IN) ---
   return (
     <div style={{ maxWidth: '1000px', margin: '30px auto', fontFamily: 'system-ui, sans-serif', color: '#1f2937', padding: '0 15px' }}>
-      
-      {/* Header with Welcome and Logout */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid #e5e7eb', paddingBottom: '15px' }}>
-        <h1 style={{ margin: 0, fontSize: '2rem' }}>Global Sentiment Dashboard</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>Welcome, <b>{username}</b></span>
-          <button 
-            onClick={handleLogout}
-            style={{ padding: '8px 14px', backgroundColor: '#EF4444', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer', fontSize: '0.875rem' }}
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+      <h1 style={{ textAlign: 'center', marginBottom: '25px', fontSize: '2rem' }}>Global Sentiment Dashboard</h1>
 
       {/* Form Section */}
       <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
