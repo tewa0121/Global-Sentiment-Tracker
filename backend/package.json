@@ -1,14 +1,14 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "global-sentiment-tracker-api",
+  "version": "1.1.0",
+  "description": "REST API that scores the sentiment of posts and stores them in MySQL.",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "generate": "node generator.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test"
   },
-  "keywords": [],
+  "keywords": ["sentiment", "express", "mysql"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
