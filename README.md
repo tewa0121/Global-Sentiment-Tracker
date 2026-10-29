@@ -2,16 +2,37 @@
 
 A live dashboard that scores the sentiment of posts and shows it by topic, over time and on a world map.
 
-- **Backend** (`backend/`): Node.js, Express 5 and MySQL. Scores each post with the [`sentiment`](https://www.npmjs.com/package/sentiment) package (AFINN word list, English only), then stores and serves it.
-- **Frontend** (`frontend/`): React 19 and Vite. Polls the API every 3 seconds and draws the headline mood, a Leaflet map, a timeline, a topic board and a live feed. Light and dark themes.
+![Dashboard overview](docs/screenshots/dashboard.png)
 
-## What you can do in the app
+**Live demo:** _add your link here_  ·  **Stack:** React 19, Vite, Leaflet, Node.js, Express 5, MySQL
 
-- Read the overall mood in one sentence, with a negative / neutral / positive bar.
-- Score your own post, with an optional location picked by clicking the map.
-- Filter by topic and date range, then export what you see as CSV.
-- Select a topic on the board to filter everything; select a feed item with a pin to fly to it on the map.
-- Hover the timeline to see which post each dot is.
+## Features
+
+- **Mood at a glance.** One sentence and a negative / neutral / positive bar summarize the conversation.
+- **Live updates.** The dashboard polls the API every 3 seconds, pauses when the tab is hidden, and highlights new posts.
+- **World map.** Every located post is a dot sized by score strength. Select a feed item to fly to it.
+- **Score your own post.** Write text, pick a topic, and optionally click the map to give it a location.
+- **Topics and filters.** Compare average sentiment per topic, filter the whole dashboard by topic and date range.
+- **Mood over time.** A hand-built SVG timeline with per-post dots, a rolling average and a hover tooltip.
+- **CSV export** of whatever is filtered, safe against spreadsheet formula injection.
+- **Light and dark themes**, mobile layout, keyboard focus styles and reduced-motion support.
+- **Clear failure states.** An offline banner explains what is wrong and retries automatically.
+
+| Map | Timeline and topics |
+| --- | --- |
+| ![Map and live feed](docs/screenshots/map.png) | ![Timeline and topic board](docs/screenshots/insights.png) |
+
+## How it works
+
+```
+Browser (React + Vite)  ──/api──▶  Express API  ──▶  MySQL
+        ▲                              │
+        └── polls every 3 s            └── scores text with the AFINN word list
+```
+
+1. A post (text, topic, optional coordinates) is sent to `POST /api/posts`.
+2. The server validates it, scores it, and derives the label from the score. Clients can never set the label.
+3. The dashboard reads the latest posts from `GET /api/posts` and computes every chart in the browser.
 
 ## Quick start
 
@@ -20,11 +41,11 @@ You need Node.js 20+ and a running MySQL (MAMP, XAMPP, Docker or a local install
 ```bash
 # 1. API
 cd backend
-cp .env.example .env        # then edit DB_PORT / DB_USER / DB_PASSWORD for your MySQL
+cp .env.example .env        # edit DB_PORT / DB_USER / DB_PASSWORD for your MySQL
 npm install
-npm start                   # http://localhost:5000  (creates the database and tables on first run)
+npm start                   # http://localhost:5000, creates the database and tables on first run
 
-# 2. Demo data (optional, second terminal). Sends synthetic posts with sample locations.
+# 2. Demo data (optional, second terminal): synthetic posts with sample city locations
 cd backend
 npm run generate
 
@@ -34,9 +55,9 @@ npm install
 npm run dev                 # http://localhost:5173
 ```
 
-The dev server forwards `/api` to `http://localhost:5000`, so no URL needs to be configured. To point the app at a hosted API, set `VITE_API_URL` (see `frontend/.env.example`).
+The dev server forwards `/api` to `http://localhost:5000`, so no URL needs configuring.
 
-Run the backend tests with `cd backend && npm test`, and lint the frontend with `cd frontend && npm run lint`.
+Tests: `cd backend && npm test`. Frontend lint and build: `cd frontend && npm run lint && npm run build`.
 
 ## API
 
@@ -44,26 +65,27 @@ Run the backend tests with `cd backend && npm test`, and lint the frontend with 
 | --- | --- | --- |
 | `GET` | `/api/health` | `{ status, database }` |
 | `GET` | `/api/posts?limit=100&offset=0` | Newest first. `limit` 1 to 100. |
-| `POST` | `/api/posts` | Body: `post_text` (required, up to 5000 characters), `keyword` (optional, defaults to `General`), `latitude` and `longitude` (optional, must be sent together). The label is always computed on the server. |
+| `POST` | `/api/posts` | Body: `post_text` (required, up to 5000 characters), `keyword` (optional, defaults to `General`), `latitude` and `longitude` (optional, sent together). |
 
-## Project layout
+## Engineering notes
 
-```
-backend/
-  server.js            Express app, validation, rate limit
-  generator.js         Demo post generator (synthetic data)
-  config/              env loader and MySQL pool
-  utils/sentiment.js   Text analysis
-  test/                node:test unit tests
-frontend/src/
-  App.jsx              State, filters, layout
-  components/          Header, MoodHero, Composer, SentimentMap, LiveFeed, Timeline, TopicBoard, FilterBar
-  hooks/               usePosts (polling), useTheme, useNow, useElementSize
-  lib/                 api, stats, csv, format, palette
-```
+- **Server-side validation** for text length, keyword length, coordinate ranges and JSON size.
+- **Per-IP rate limiting** and an allow-list for CORS origins.
+- **Parameterized SQL** everywhere, and the schema is created without ever dropping data.
+- **No chart library.** The timeline and topic board are small SVG and CSS components, which keeps the bundle light and the behavior fully controlled.
+- **Graceful polling.** Requests are cancelled on unmount, skipped while the tab is hidden, and retried after failures.
 
-## Known limits
+## Deploying
 
-- Scores are lexicon-based and English-only, so sarcasm and other languages are not understood.
-- The dashboard works on the latest 100 posts the API returns.
-- The in-memory rate limiter suits a single local instance; use a shared store for multi-instance deployments.
+See [docs/PORTFOLIO.md](docs/PORTFOLIO.md) for a step-by-step guide (frontend on Vercel or Netlify, API on Render or Railway, hosted MySQL).
+
+## Known limits and next steps
+
+- Scoring is lexicon-based and English-only, so sarcasm and other languages (for example Amharic) are not understood. A multilingual model is the natural next step.
+- The dashboard works on the latest 100 posts. A `/api/stats` endpoint would let totals cover all posts.
+- Posting is open. For a public deployment, add an API key or user accounts before accepting real traffic.
+- The in-memory rate limiter suits a single instance; use a shared store (for example Redis) for several.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

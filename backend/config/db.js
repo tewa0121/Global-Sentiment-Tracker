@@ -15,6 +15,11 @@ if (!/^[A-Za-z0-9_]+$/.test(config.database)) {
   throw new Error('DB_NAME may contain only letters, numbers, and underscores');
 }
 
+// Hosted MySQL providers usually require TLS. Set DB_SSL=true to enable it.
+const ssl = String(process.env.DB_SSL || '').toLowerCase() === 'true'
+  ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
+  : undefined;
+
 let pool;
 
 async function initDB() {
@@ -25,6 +30,7 @@ async function initDB() {
     port: config.port,
     user: config.user,
     password: config.password,
+    ssl,
   });
 
   try {
@@ -37,6 +43,7 @@ async function initDB() {
 
   pool = mysql.createPool({
     ...config,
+    ssl,
     waitForConnections: true,
     connectionLimit: Number.parseInt(process.env.DB_CONNECTION_LIMIT || '10', 10),
     queueLimit: 0,

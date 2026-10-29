@@ -1,6 +1,6 @@
 {
   "name": "global-sentiment-tracker-api",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "REST API that scores the sentiment of posts and stores them in MySQL.",
   "main": "server.js",
   "scripts": {
@@ -8,17 +8,22 @@
     "generate": "node generator.js",
     "test": "node --test"
   },
-  "keywords": ["sentiment", "express", "mysql"],
+  "keywords": [
+    "sentiment",
+    "express",
+    "mysql"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "axios": "^1.20.0",
-    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.3",
     "sentiment": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

@@ -19,6 +19,9 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http:
   .filter(Boolean);
 
 app.disable('x-powered-by');
+// Behind a hosting proxy (Render, Railway, Fly) set TRUST_PROXY=1 so req.ip is the real client.
+const trustProxy = Number.parseInt(process.env.TRUST_PROXY || '0', 10);
+if (trustProxy > 0) app.set('trust proxy', trustProxy);
 app.use(cors({
   origin(origin, callback) {
     // No Origin is common for CLI tools and local health checks.
