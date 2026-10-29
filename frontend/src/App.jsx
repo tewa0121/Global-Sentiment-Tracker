@@ -1,207 +1,150 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import axios from 'axios';
-import SentimentPieChart from './SentimentPieChart.jsx';
-import SentimentLineChart from './SentimentLineChart.jsx';
-import SummaryMetrics from './SummaryMetrics.jsx';
-import SentimentMap from './SentimentMap.jsx';
-import DataExport from './DataExport.jsx';
+import { useMemo, useState } from 'react';
+import './App.css';
+import Composer from './components/Composer.jsx';
+import FilterBar from './components/FilterBar.jsx';
+import Header from './components/Header.jsx';
+import LiveFeed from './components/LiveFeed.jsx';
+import MoodHero from './components/MoodHero.jsx';
+import SentimentMap from './components/SentimentMap.jsx';
+import Timeline from './components/Timeline.jsx';
+import TopicBoard from './components/TopicBoard.jsx';
+import { usePosts } from './hooks/usePosts.js';
+import { useTheme } from './hooks/useTheme.js';
+import { API_BASE } from './lib/api.js';
+import { downloadCsv } from './lib/csv.js';
+import { parseDate } from './lib/format.js';
+import { groupByKeyword, summarize } from './lib/stats.js';
+
+const NO_RANGE = { from: '', to: '' };
 
 export default function App() {
-  const [posts, setPosts] = useState([]);
-  const [text, setText] = useState('');
-  const [keyword, setKeyword] = useState('Technology');
-  const [selectedFilter, setSelectedFilter] = useState('ALL');
-  const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
-  const [loading, setLoading] = useState(false);
+  const { posts, status, error, updatedAt, freshIds, refresh } = usePosts();
+  const { theme, toggle } = useTheme();
 
-  // Fetch posts with clean cancellation handling to prevent console abort errors
-  const fetchPosts = useCallback(async (signal) => {
-    try {
-      const res = await axios.get('http://localhost:5000/api/posts', { signal });
-      setPosts(res.data);
-    } catch (err) {
-      if (
-        axios.isCancel(err) ||
-        err.code === 'ERR_CANCELED' ||
-        err.code === 'ECONNABORTED' ||
-        err.name === 'CanceledError' ||
-        err.message === 'canceled' ||
-        err.message === 'Request aborted'
-      ) {
-        return; // Silently ignore intentional request cancellations during unmounts/HMR
-      }
-      console.error('Failed to fetch posts:', err);
-    }
-  }, []);
+  const [topic, setTopic] = useState('');
+  const [range, setRange] = useState(NO_RANGE);
+  const [pin, setPin] = useState(null);
+  const [pinning, setPinning] = useState(false);
+  const [focus, setFocus] = useState(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetchPosts(controller.signal);
-    const interval = setInterval(() => {
-      fetchPosts(controller.signal);
-    }, 3000);
-
-    return () => {
-      controller.abort();
-      clearInterval(interval);
-    };
-  }, [fetchPosts]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!text.trim()) return;
-
-    setLoading(true);
-    try {
-      await axios.post('http://localhost:5000/api/posts', { text, keyword });
-      setText('');
-      await fetchPosts();
-    } catch (err) {
-      console.error('Error adding post:', err);
-      alert('Failed to send data to the server.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const uniqueKeywords = useMemo(() => {
-    const set = new Set(posts.map((p) => p.keyword).filter(Boolean));
-    return Array.from(set);
-  }, [posts]);
-
-  const filteredPosts = useMemo(() => {
-    return posts.filter((p) => {
-      const matchesKeyword =
-        selectedFilter === 'ALL' ||
-        p.keyword?.toLowerCase() === selectedFilter.toLowerCase();
-
-      let matchesDate = true;
-      if (p.created_at) {
-        const postDate = new Date(p.created_at);
-        if (dateRange.startDate) {
-          matchesDate = matchesDate && postDate >= new Date(dateRange.startDate);
-        }
-        if (dateRange.endDate) {
-          const end = new Date(dateRange.endDate);
-          end.setHours(23, 59, 59, 999);
-          matchesDate = matchesDate && postDate <= end;
-        }
-      }
-
-      return matchesKeyword && matchesDate;
+  // Date filter first. The topic board uses this list so you can still compare
+  // topics while one of them is selected.
+  const inRange = useMemo(() => {
+    const start = range.from ? new Date(`${range.from}T00:00:00`) : null;
+    const end = range.to ? new Date(`${range.to}T23:59:59.999`) : null;
+    if (!start && !end) return posts;
+    return posts.filter((post) => {
+      const date = parseDate(post.created_at);
+      if (!date) return false;
+      if (start && date < start) return false;
+      if (end && date > end) return false;
+      return true;
     });
-  }, [posts, selectedFilter, dateRange]);
+  }, [posts, range]);
 
-  const getBadgeColor = (label) => {
-    switch (label?.toLowerCase()) {
-      case 'positive': return '#10B981';
-      case 'negative': return '#EF4444';
-      default: return '#6B7280';
-    }
-  };
+  const visible = useMemo(() => {
+    if (!topic) return inRange;
+    const wanted = topic.toLowerCase();
+    return inRange.filter((post) => (post.keyword || 'General').toLowerCase() === wanted);
+  }, [inRange, topic]);
+
+  const topics = useMemo(() => groupByKeyword(inRange), [inRange]);
+  const summary = useMemo(() => summarize(visible), [visible]);
+
+  const filtersActive = Boolean(topic || range.from || range.to);
+  const loading = status === 'connecting' && posts.length === 0;
+
+  function clearFilters() {
+    setTopic('');
+    setRange(NO_RANGE);
+  }
+
+  function handlePosted() {
+    setPin(null);
+    setPinning(false);
+    refresh();
+  }
+
+  function locate(post) {
+    setFocus({
+      id: post.id,
+      latitude: Number(post.latitude),
+      longitude: Number(post.longitude),
+      nonce: Date.now(),
+    });
+  }
+
+  function exportCsv() {
+    downloadCsv(visible, `sentiment-${new Date().toISOString().slice(0, 10)}.csv`);
+  }
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '30px auto', fontFamily: 'system-ui, sans-serif', color: '#1f2937', padding: '0 15px' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '25px', fontSize: '2rem' }}>Global Sentiment Dashboard</h1>
+    <div className="app">
+      <Header status={status} updatedAt={updatedAt} theme={theme} onToggleTheme={toggle} />
 
-      {/* Form Section */}
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
-        <input
-          type="text"
-          placeholder="Keyword"
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          style={{ padding: '12px', width: '25%', borderRadius: '6px', border: '1px solid #d1d5db' }}
+      {status === 'offline' && (
+        <div className="banner" role="alert">
+          <strong>{error}</strong> Start the backend with <code>npm start</code> in the backend folder and make sure
+          MySQL is running. This page keeps retrying every few seconds.
+        </div>
+      )}
+
+      <main>
+        <div className="hero">
+          <MoodHero summary={summary} topicCount={topics.length} topic={topic} loading={loading} />
+          <Composer
+            topics={topics.map((t) => t.keyword)}
+            pin={pin}
+            pinning={pinning}
+            onStartPin={() => setPinning(true)}
+            onCancelPin={() => setPinning(false)}
+            onClearPin={() => setPin(null)}
+            onPosted={handlePosted}
+          />
+        </div>
+
+        <FilterBar
+          topics={topics}
+          topic={topic}
+          onTopic={setTopic}
+          range={range}
+          onRange={setRange}
+          active={filtersActive}
+          onClear={clearFilters}
+          onExport={exportCsv}
+          exportCount={visible.length}
         />
-        <input
-          type="text"
-          placeholder="Enter text to analyze..."
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          style={{ padding: '12px', width: '60%', borderRadius: '6px', border: '1px solid #d1d5db' }}
-        />
-        <button 
-          type="submit" 
-          disabled={loading}
-          style={{ 
-            padding: '12px 20px', 
-            cursor: loading ? 'not-allowed' : 'pointer', 
-            backgroundColor: loading ? '#9ca3af' : '#2563EB', 
-            color: '#fff', 
-            border: 'none', 
-            borderRadius: '6px',
-            fontWeight: '600'
-          }}
-        >
-          {loading ? 'Analyzing...' : 'Analyze'}
-        </button>
-      </form>
 
-      {/* Summary Row */}
-      <SummaryMetrics posts={filteredPosts} />
-
-      {/* Filter and Export Component */}
-      <DataExport posts={filteredPosts} onDateFilter={setDateRange} />
-
-      {/* Topics Control */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '1.25rem', margin: 0 }}>Analytics Breakdown</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label htmlFor="filter" style={{ fontSize: '0.9rem', color: '#4b5563', fontWeight: '500' }}>Filter Topic:</label>
-          <select
-            id="filter"
-            value={selectedFilter}
-            onChange={(e) => setSelectedFilter(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: '#fff' }}
-          >
-            <option value="ALL">All Keywords ({posts.length})</option>
-            {uniqueKeywords.map((kw) => (
-              <option key={kw} value={kw}>#{kw}</option>
-            ))}
-          </select>
+        <div className="grid grid--map">
+          <SentimentMap
+            posts={visible}
+            summary={summary}
+            freshIds={freshIds}
+            theme={theme}
+            pin={pin}
+            pinning={pinning}
+            onPick={(coords) => {
+              setPin(coords);
+              setPinning(false);
+            }}
+            onCancelPin={() => setPinning(false)}
+            focus={focus}
+          />
+          <LiveFeed posts={visible} freshIds={freshIds} onLocate={locate} />
         </div>
-      </div>
 
-      {/* Map Visualization */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#fff', marginBottom: '30px' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>Global Sentiment Map</h3>
-        <SentimentMap posts={filteredPosts} />
-      </div>
-
-      {/* Analytics Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#fff' }}>
-          <h3 style={{ margin: '0 0 15px 0' }}>Distribution</h3>
-          <SentimentPieChart posts={filteredPosts} />
+        <div className="grid grid--insights">
+          <Timeline posts={visible} />
+          <TopicBoard topics={topics} selected={topic} onSelect={setTopic} />
         </div>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#fff' }}>
-          <h3 style={{ margin: '0 0 15px 0' }}>Score Timeline</h3>
-          <SentimentLineChart posts={filteredPosts} />
-        </div>
-      </div>
+      </main>
 
-      {/* Live Feed List */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', backgroundColor: '#fff' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>Live Feed ({filteredPosts.length})</h3>
-        {filteredPosts.length === 0 ? (
-          <p style={{ color: '#6b7280' }}>No matching posts found.</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {filteredPosts.slice(0, 10).map((post) => (
-              <li key={post.id} style={{ padding: '12px 0', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ fontWeight: '600', color: '#2563eb', marginRight: '10px' }}>#{post.keyword}</span>
-                  <span style={{ color: '#374151' }}>{post.post_text}</span>
-                </div>
-                <span style={{ backgroundColor: getBadgeColor(post.sentiment_label), color: '#fff', padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600' }}>
-                  {post.sentiment_label} ({post.sentiment_score})
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <footer className="footer">
+        <p>
+          Scores come from an English word list (AFINN), so treat them as a quick signal rather than a verdict. The
+          dashboard shows the latest 100 posts from <code>{API_BASE}</code>.
+        </p>
+      </footer>
     </div>
   );
 }
